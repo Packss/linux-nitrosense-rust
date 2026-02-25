@@ -3,6 +3,7 @@ name = "linux-nitrosense"
 version = "0.1.0"
 edition = "2021"
 description = "Acer NitroSense fan/power/keyboard control for Linux"
+repository = "https://github.com/Packss/linux-nitrosense-rust"
 license = "MIT"
 
 [dependencies]
