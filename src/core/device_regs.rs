@@ -198,6 +198,7 @@ fn model_to_ecs() -> HashMap<&'static str, EcRegisters> {
     m.insert("Nitro AN515-46", ECS_AN515_46);
     m.insert("Nitro AN515-54", ECS_AN515_46);
     m.insert("Nitro AN515-56", ECS_AN515_46);
+    m.insert("Nitro AN515-57", ECS_AN515_46);
     m.insert("Nitro AN515-58", ECS_AN515_46);
     m
 }
