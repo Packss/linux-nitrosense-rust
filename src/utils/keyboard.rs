@@ -60,7 +60,7 @@ fn set_dynamic(mode: u8, speed: u8, brightness: u8, direction: u8, color: Rgb) {
     payload[0] = mode;
     payload[1] = speed;
     payload[2] = brightness;
-    payload[3] = if mode == 3 { 8 } else { 0 }; // wave special from python script
+    payload[3] = if mode == 3 { 8 } else { 0 }; // Wave mode requires special flag
     payload[4] = direction;
     payload[5] = color.r;
     payload[6] = color.g;
@@ -70,8 +70,7 @@ fn set_dynamic(mode: u8, speed: u8, brightness: u8, direction: u8, color: Rgb) {
 }
 
 fn static_payload(zone: u8, color: Rgb) -> [u8; PAYLOAD_SIZE_STATIC] {
-    // zone is 1-based index (1,2,3,4)
-    // python: payload[0] = 1 << (zone - 1)
+    // Zone 1-4. Bitmask for zone selection.
     [1 << (zone - 1), color.r, color.g, color.b]
 }
 
@@ -91,8 +90,7 @@ fn write_device(path: &str, payload: &[u8]) {
         }
         Err(e) => {
              // Silently fail if device doesn't exist (e.g. testing)
-             // or print debug
-             eprintln!("Failed to open {path}: {e}");
+             // Log error but don't panic if device missing (e.g. not root) to open {path}: {e}");
         }
     }
 }

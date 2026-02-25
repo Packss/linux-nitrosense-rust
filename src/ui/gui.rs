@@ -21,9 +21,7 @@ use crate::core::cpu_ctl::VoltageInfo;
 use crate::protocol::{BatteryStatus, EcData, FanMode, NitroMode, Request, Response};
 use crate::utils::keyboard::{self, Rgb};
 
-// ---------------------------------------------------------------------------
 // Shared application state
-// ---------------------------------------------------------------------------
 
 pub struct AppState {
     pub client: Client,
@@ -66,9 +64,7 @@ impl AppState {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("Failed to connect to daemon: {}", e);
-                // We might want to panic or show error dialog.
-                // For now, panic to simplicity as app cannot run without daemon.
-                panic!("Could not connect to daemon. Is it running?");
+                panic!("Daemon connection failed. Check if service is running.");
             }
         };
 
@@ -130,7 +126,7 @@ impl AppState {
         }
     }
 
-    // -- fan mode commands --------------------------------------------------
+    // Fan Mode
 
     pub fn set_cpu_auto(&mut self) {
         let _ = self.client.send(Request::SetCpuFanMode(FanMode::Auto));
@@ -145,7 +141,7 @@ impl AppState {
     }
 
     pub fn set_cpu_speed(&mut self, level: u8) {
-        // level is 0-20. Register expects level * 5?
+        // Range 0-20. Register expects 0-100.
         let val = level * 5;
         let _ = self.client.send(Request::SetCpuFanSpeed(val));
     }
@@ -167,7 +163,7 @@ impl AppState {
         let _ = self.client.send(Request::SetGpuFanSpeed(val));
     }
 
-    // -- nitro mode ---------------------------------------------------------
+    // Nitro Mode
 
     pub fn set_quiet_mode(&mut self) {
         let _ = self.client.send(Request::SetNitroMode(NitroMode::Quiet));
@@ -205,7 +201,7 @@ impl AppState {
         }
     }
 
-    // -- toggles ------------------------------------------------------------
+    // Toggles
 
     pub fn toggle_kb_timeout(&mut self, on: bool) {
         let _ = self.client.send(Request::SetKbTimeout(on));
@@ -226,13 +222,13 @@ impl AppState {
     pub fn refresh_voltage(&mut self) {
     }
 
-    // -- config persistence -------------------------------------------------
+    // Config Persistence
 
     pub fn load_config(&mut self) {
         self.poll_ec();
     }
 
-    // -- battery status string ----------------------------------------------
+    // Battery Status
 
     pub fn battery_status_text(&self) -> &str {
         match self.battery_status {
@@ -256,7 +252,7 @@ impl AppState {
         if self.battery_charge_limit { "On" } else { "Off" }
     }
 
-    // -- keyboard -----------------------------------------------------------
+    // Keyboard
 
     pub fn set_rgb_mode(&mut self, mode: u8) {
         self.rgb_config.mode = mode;
@@ -303,9 +299,7 @@ impl AppState {
     }
 }
 
-// ---------------------------------------------------------------------------
 // UI builder
-// ---------------------------------------------------------------------------
 
 const APP_CSS: &str = r#"
 window {
@@ -399,7 +393,7 @@ pub fn build_ui(app: &gtk4::Application, state: Rc<RefCell<AppState>>) -> Window
     main_vbox.set_margin_start(20);
     main_vbox.set_margin_end(20);
 
-    // --- Header ---
+    // Header
     let header = GtkBox::new(Orientation::Horizontal, 0);
     header.set_margin_bottom(20);
 
@@ -407,9 +401,7 @@ pub fn build_ui(app: &gtk4::Application, state: Rc<RefCell<AppState>>) -> Window
     let stack = Stack::new();
     let switcher = StackSwitcher::new();
     switcher.set_stack(Some(&stack));
-    // We want custom styling for switcher buttons to match "header-btn"
-    // But StackSwitcher creates buttons automatically. 
-    // Let's just use the stack and switcher for now, effectively "Home" and "Keyboard" tabs.
+    // Default StackSwitcher styling used for now.
     header.append(&switcher);
 
     // Spacer
@@ -419,8 +411,7 @@ pub fn build_ui(app: &gtk4::Application, state: Rc<RefCell<AppState>>) -> Window
 
     // Right: Mode Selectors (Quiet, Default, Extreme)
     let mode_box = GtkBox::new(Orientation::Horizontal, 4);
-    mode_box.add_css_class("card"); // mini card look or just transparent? React used bg-[#2a201d] p-1 rounded-lg
-    // Actually the React code put this in headers.
+    mode_box.add_css_class("card");
     
     let mode_quiet = CheckButton::builder().label("Quiet").css_classes(["mode-btn"]).build();
     let mode_default = CheckButton::builder().label("Default").css_classes(["mode-btn"]).build();
@@ -428,9 +419,7 @@ pub fn build_ui(app: &gtk4::Application, state: Rc<RefCell<AppState>>) -> Window
     mode_default.set_group(Some(&mode_quiet));
     mode_extreme.set_group(Some(&mode_quiet));
     
-    // Logic to set initial state... handled in poll? 
-    // We need to sync initial state.
-    {
+    // Set initial active state based on current mode
         let s = state.borrow();
          match s.nitro_mode {
             NitroMode::Quiet => mode_quiet.set_active(true),
@@ -450,7 +439,7 @@ pub fn build_ui(app: &gtk4::Application, state: Rc<RefCell<AppState>>) -> Window
     header.append(&mode_box);
     main_vbox.append(&header);
 
-    // --- Content ---
+    // Content
     let home_tab = build_home_tab(&state);
     stack.add_titled(&home_tab.container, Some("home"), "Home");
 
@@ -484,17 +473,14 @@ impl HomeTab {
 }
 
 fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
-    // We use a Grid to emulate the "grid-cols-3" layout
-    // Col 1: Power Card
-    // Col 2-3: Telemetry Card
-    // Row 2 (Col 1-3): Tuning Card
+    // Layout: Power (0,0), Health (1,0, span 2), Tuning (0,1, span 3)
     
     let grid = Grid::new();
     grid.set_column_spacing(20);
     grid.set_row_spacing(20);
     grid.set_margin_bottom(20);
 
-    // --- Power Card (Col 0, Row 0) ---
+    // Power Status
     let power_card = GtkBox::new(Orientation::Vertical, 12);
     power_card.add_css_class("card");
     
@@ -518,11 +504,7 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
     charge_val.add_css_class("value-text");
     power_card.append(&make_row("Charge Limit", &charge_val));
 
-    // Also add toggles here for convenience?
-    // React UI has "80% Enabled" text.
-    // Let's add small switches next to them? Or just click to toggle?
-    // Following React design strictly: just text.
-    // But we need controls. Let's add switches at bottom of card.
+    // Power controls
     let switches_box = GtkBox::new(Orientation::Vertical, 6);
     let limit_sw = CheckButton::with_label("Limit 80%");
     let usb_sw = CheckButton::with_label("USB Charge");
@@ -539,7 +521,7 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
 
     grid.attach(&power_card, 0, 0, 1, 1);
 
-    // --- Telemetry Card (Col 1-2, Row 0) ---
+    // System Health
     let stats_card = GtkBox::new(Orientation::Vertical, 12);
     stats_card.add_css_class("card");
     stats_card.set_hexpand(true);
@@ -552,7 +534,7 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
     let stats_content = Grid::new();
     stats_content.set_column_spacing(40);
     
-    // Temp Bars (Left side of card)
+    // Temp Bars
     let temps_box = GtkBox::new(Orientation::Vertical, 16);
     temps_box.set_hexpand(true);
     
@@ -574,9 +556,9 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
     
     stats_content.attach(&temps_box, 0, 0, 1, 1);
 
-    // Fan RPMs (Right side)
+    // Fan RPMs
     let fans_box = GtkBox::new(Orientation::Vertical, 16);
-    fans_box.set_margin_start(20); // Border left basically
+    fans_box.set_margin_start(20);
     
     let cpu_rpm = Label::new(Some("0 RPM"));
     cpu_rpm.add_css_class("value-text");
@@ -593,9 +575,9 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
     stats_content.attach(&fans_box, 1, 0, 1, 1);
     
     stats_card.append(&stats_content);
-    grid.attach(&stats_card, 1, 0, 2, 1); // Span 2 cols
+    grid.attach(&stats_card, 1, 0, 2, 1);
 
-    // --- Tuning Card (Row 1, Span 3) ---
+    // Performance Tuning
     let tune_card = GtkBox::new(Orientation::Vertical, 12);
     tune_card.add_css_class("card");
     
@@ -614,7 +596,7 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
     uv_msg.set_halign(Align::Start);
     uv_msg.add_css_class("label-secondary");
     
-    let uv_items = StringList::new(&["0mV", "-100mV", "-200mV"]); // Todo: more fine grained?
+    let uv_items = StringList::new(&["0mV", "-100mV", "-200mV"]);
     let uv_dd = DropDown::new(Some(uv_items), gtk4::Expression::NONE);
     let uv_apply = Button::with_label("Apply Offset");
     let uv_status = Label::new(None);
@@ -672,12 +654,11 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
         cpu_rpm.set_markup(&format!("<span size='x-large'>{}</span> <span size='small' color='gray'>RPM</span>", s.cpu_fan_speed));
         gpu_rpm.set_markup(&format!("<span size='x-large'>{}</span> <span size='small' color='gray'>RPM</span>", s.gpu_fan_speed));
         
-        // Fan Controls
-        // Sync sliders and checkbuttons state
+        // Sync Fan Controls
         (cpu_ctl.update)(s);
         (gpu_ctl.update)(s);
         
-        // UV status
+        // Update UV Status
         uv_status.set_text(&s.undervolt_status);
     }) as Box<dyn FnMut(&AppState)>));
 
@@ -699,22 +680,18 @@ fn build_fan_column(title: &str, state: &Rc<RefCell<AppState>>, is_cpu: bool) ->
     header.append(&lbl);
     
     let manual_badge = Label::new(Some("Manual"));
-    manual_badge.add_css_class("mode-btn"); // reuse badge style
+    manual_badge.add_css_class("mode-btn");
     manual_badge.set_halign(Align::End);
     manual_badge.set_hexpand(true);
-    // header.append(&manual_badge); // Dynamically show?
     vbox.append(&header);
     
     // Slider
     let slider = Scale::with_range(Orientation::Horizontal, 0.0, 20.0, 1.0);
     
-    // Mode Buttons (Radio behavior)
+    // Mode Selection
     let modes_box = GtkBox::new(Orientation::Horizontal, 2);
     let auto_btn = CheckButton::with_label("Auto");
     let max_btn = CheckButton::with_label("Max");
-    // Ideally these look like the segment control in the React screenshot bottom
-    // "Power Save | Balanced | Turbo" -> mapped to Auto | ? | Turbo/Max
-    // Let's stick to CheckButtons for clarity
     let manual_btn = CheckButton::with_label("Custom");
     max_btn.set_group(Some(&auto_btn));
     manual_btn.set_group(Some(&auto_btn));
@@ -726,7 +703,7 @@ fn build_fan_column(title: &str, state: &Rc<RefCell<AppState>>, is_cpu: bool) ->
     vbox.append(&slider);
     vbox.append(&modes_box);
     
-    // Logic
+    // Signal Handlers
     {
         let st = Rc::clone(state);
         auto_btn.connect_toggled(move |btn| if btn.is_active() { 
@@ -761,12 +738,7 @@ fn build_fan_column(title: &str, state: &Rc<RefCell<AppState>>, is_cpu: bool) ->
     let update = Box::new(move |s: &AppState| {
         let (mode, level) = if is_cpu { (s.cpu_mode, s.cpu_manual_level) } else { (s.gpu_mode, s.gpu_manual_level) };
         
-        // Update selection without triggering signals? 
-        // Signal blocks needed or check if active changes?
-        // Gtk4 checkbuttons fire toggled only on user interaction? No, on set_active too.
-        // We need to suppress or handle efficiently.
-        // For simplicity, we just set. The signal handler calls set_mode, which is idempotent mostly.
-        
+        // Update UI selection
         match mode {
             FanMode::Auto => auto_btn.set_active(true),
             FanMode::Turbo => max_btn.set_active(true),
@@ -813,7 +785,6 @@ fn build_keyboard_tab(state: &Rc<RefCell<AppState>>) -> GtkBox {
     
     // Header
     let label = Label::new(Some("Keyboard RGB Settings"));
-    // label.add_css_class("title-2"); // assuming this class exists or standard gtk
     container.append(&label);
 
     // Initial state
@@ -826,20 +797,20 @@ fn build_keyboard_tab(state: &Rc<RefCell<AppState>>) -> GtkBox {
     let initial_color = st.rgb_config.color;
     drop(st);
 
-    // -- Mode --
+    // Mode
     let list_modes = StringList::new(&["Static", "Breathing", "Neon", "Wave", "Shifting", "Zoom", "Meteor"]);
     let mode_dd = DropDown::new(Some(list_modes), gtk4::Expression::NONE);
     mode_dd.set_selected(initial_mode as u32);
     container.append(&make_row_multi("Mode", &mode_dd));
 
-    // -- Zone (Static only) --
+    // Zone (Static only)
     let list_zones = StringList::new(&["All Zones", "Zone 1", "Zone 2", "Zone 3", "Zone 4"]);
     let zone_dd = DropDown::new(Some(list_zones), gtk4::Expression::NONE);
     zone_dd.set_selected(initial_zone as u32);
     let zone_row = make_row_multi("Zone", &zone_dd);
     container.append(&zone_row);
 
-    // -- Color --
+    // Color
     let color_btn = ColorButton::new();
     let rgba = gdk::RGBA::new(
         initial_color.r as f32 / 255.0,
@@ -851,18 +822,16 @@ fn build_keyboard_tab(state: &Rc<RefCell<AppState>>) -> GtkBox {
     let color_row = make_row_multi("Color", &color_btn);
     container.append(&color_row);
 
-    // -- Direction --
-    // List: Index 0 = Right, Index 1 = Left
+    // Direction (0=Right, 1=Left)
     let list_direction = StringList::new(&["Right", "Left"]); 
     let dir_dd = DropDown::new(Some(list_direction), gtk4::Expression::NONE);
-    // New logic: 1 = Right, 2 = Left
-    // If initial_dir is 2 (Left), select index 1.
-    // Otherwise (1 or default), select index 0 (Right).
+    
+    // Map initial value
     dir_dd.set_selected(if initial_dir == 2 { 1 } else { 0 });
     let dir_row = make_row_multi("Direction", &dir_dd);
     container.append(&dir_row);
 
-    // -- Brightness --
+    // Brightness
     let b_adj = Adjustment::new(initial_brit as f64, 0.0, 100.0, 1.0, 10.0, 0.0);
     let brightness_scale = Scale::new(Orientation::Horizontal, Some(&b_adj));
     brightness_scale.set_digits(0);
@@ -871,7 +840,7 @@ fn build_keyboard_tab(state: &Rc<RefCell<AppState>>) -> GtkBox {
     let brit_row = make_row_multi("Brightness", &brightness_scale);
     container.append(&brit_row);
 
-    // -- Speed --
+    // Speed
     let s_adj = Adjustment::new(initial_speed as f64, 0.0, 9.0, 1.0, 1.0, 0.0);
     let speed_scale = Scale::new(Orientation::Horizontal, Some(&s_adj));
     speed_scale.set_digits(0);
@@ -880,7 +849,7 @@ fn build_keyboard_tab(state: &Rc<RefCell<AppState>>) -> GtkBox {
     let speed_row = make_row_multi("Speed", &speed_scale);
     container.append(&speed_row);
 
-    // Logic to show/hide rows based on mode
+    // Show/hide rows based on mode
     let uv_zone = zone_row.clone();
     let uv_dir = dir_row.clone();
     let uv_speed = speed_row.clone();
@@ -917,7 +886,7 @@ fn build_keyboard_tab(state: &Rc<RefCell<AppState>>) -> GtkBox {
     let s = Rc::clone(state);
     dir_dd.connect_selected_notify(move |d| {
         let dir_idx = d.selected();
-        // Index 0 (Right) -> 1, Index 1 (Left) -> 2
+        // Map index to EC value (Right=1, Left=2)
         let dir_val = if dir_idx == 0 { 1 } else { 2 };
         if let Ok(mut st) = s.try_borrow_mut() {
             st.set_rgb_direction(dir_val as u8);

@@ -11,7 +11,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
 const NITRO_CONF: &str = "nitrosense.conf";
-const RGB_CONF: &str = "rbg.conf"; // keep original filename for compat
+const RGB_CONF: &str = "rgb.conf";
 
 fn config_dir() -> PathBuf {
     if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
@@ -34,9 +34,7 @@ fn conf_path(name: &str) -> PathBuf {
     config_dir().join(name)
 }
 
-// ---------------------------------------------------------------------------
 // NitroSense system config
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub struct NitroConfig {
@@ -106,9 +104,7 @@ impl NitroConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Keyboard RGB config
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub struct RgbConfig {
