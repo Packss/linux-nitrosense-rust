@@ -31,4 +31,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: linux-nitrosense
-        path: target/release/linux-nitrosense
+        path: |
+          target/release/linux-nitrosense
+          linux-nitrosense.desktop
+          linux-nitrosense.service
+          install.sh
