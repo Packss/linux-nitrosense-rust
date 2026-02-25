@@ -420,8 +420,9 @@ pub fn build_ui(app: &gtk4::Application, state: Rc<RefCell<AppState>>) -> Window
     mode_extreme.set_group(Some(&mode_quiet));
     
     // Set initial active state based on current mode
+    {
         let s = state.borrow();
-         match s.nitro_mode {
+        match s.nitro_mode {
             NitroMode::Quiet => mode_quiet.set_active(true),
             NitroMode::Extreme => mode_extreme.set_active(true),
             _ => mode_default.set_active(true),
