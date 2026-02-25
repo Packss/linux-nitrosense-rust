@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::cpu_ctl::VoltageInfo;
 
+pub const SOCKET_PATH: &str = "/tmp/nitrosense.sock";
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EcData {
     pub cpu_temp: u8,

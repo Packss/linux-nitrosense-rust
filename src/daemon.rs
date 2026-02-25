@@ -8,10 +8,8 @@ use crate::config::{NitroConfig, RgbConfig};
 use crate::core::cpu_ctl::CpuController;
 use crate::core::device_regs::{detect_device, EcRegisters};
 use crate::core::ec_writer::EcWriter;
-use crate::protocol::{BatteryStatus, EcData, FanMode, NitroMode, Request, Response};
+use crate::protocol::{BatteryStatus, EcData, FanMode, NitroMode, Request, Response, SOCKET_PATH};
 use crate::utils::keyboard::{self, Rgb};
-
-const SOCKET_PATH: &str = "/tmp/nitrosense.sock";
 
 struct DaemonState {
     ec: EcWriter,
@@ -221,7 +219,8 @@ pub fn run_daemon() {
         }
     };
 
-    if let Err(e) = fs::set_permissions(SOCKET_PATH, fs::Permissions::from_mode(0o777)) {
+    // Set permissions to 666 so any user can connect (read/write to socket)
+    if let Err(e) = fs::set_permissions(SOCKET_PATH, fs::Permissions::from_mode(0o666)) {
          eprintln!("Failed to set socket permissions: {}", e);
     }
 

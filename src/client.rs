@@ -1,7 +1,7 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 
-use crate::protocol::{Request, Response};
+use crate::protocol::{Request, Response, SOCKET_PATH};
 
 pub struct Client {
     stream: UnixStream,
@@ -10,7 +10,7 @@ pub struct Client {
 
 impl Client {
     pub fn new() -> io::Result<Self> {
-        let stream = UnixStream::connect("/tmp/nitrosense.sock")?;
+        let stream = UnixStream::connect(SOCKET_PATH)?;
         let reader = BufReader::new(stream.try_clone()?);
         Ok(Self { stream, reader })
     }

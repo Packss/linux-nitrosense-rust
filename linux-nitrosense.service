@@ -1,0 +1,12 @@
+[Unit]
+Description=NitroSense Service
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/linux-nitrosense --daemon
+Restart=on-failure
+User=root
+
+[Install]
+WantedBy=multi-user.target
