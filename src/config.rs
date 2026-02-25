@@ -1,24 +1,37 @@
 /// Persistent configuration for NitroSense and keyboard RGB.
 ///
-/// Files are stored under `/etc/nitrosense/` as simple line-delimited values
-/// (matching the original Python behaviour) so that existing configs remain
-/// compatible.
+/// Files are stored under `$XDG_CONFIG_HOME/nitrosense/` or `~/.config/nitrosense/` 
+/// as simple line-delimited values (matching the original Python behaviour) so that 
+/// existing configs remain compatible.
 
 use crate::utils::keyboard::Rgb;
+use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::PathBuf;
 
-const CONFIG_DIR: &str = "/etc/nitrosense";
 const NITRO_CONF: &str = "nitrosense.conf";
 const RGB_CONF: &str = "rbg.conf"; // keep original filename for compat
 
-fn ensure_dir() {
-    let _ = fs::create_dir_all(CONFIG_DIR);
+fn config_dir() -> PathBuf {
+    if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
+        return PathBuf::from(xdg).join("nitrosense");
+    }
+    
+    if let Ok(home) = env::var("HOME") {
+        return PathBuf::from(home).join(".config/nitrosense");
+    }
+
+    // Fallback if no HOME (unlikely)
+    PathBuf::from("/tmp/nitrosense")
 }
 
-fn conf_path(name: &str) -> String {
-    format!("{CONFIG_DIR}/{name}")
+fn ensure_dir() {
+    let _ = fs::create_dir_all(config_dir());
+}
+
+fn conf_path(name: &str) -> PathBuf {
+    config_dir().join(name)
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +66,7 @@ impl NitroConfig {
         let mut f = match fs::File::create(&path) {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("Failed to write {path}: {e}");
+                eprintln!("Failed to write {}: {}", path.display(), e);
                 return;
             }
         };
@@ -67,7 +80,7 @@ impl NitroConfig {
 
     pub fn load() -> Option<Self> {
         let path = conf_path(NITRO_CONF);
-        if !Path::new(&path).exists() {
+        if !path.exists() {
             return None;
         }
         let f = fs::File::open(&path).ok()?;
@@ -127,7 +140,7 @@ impl RgbConfig {
         let mut f = match fs::File::create(&path) {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("Failed to write {path}: {e}");
+                eprintln!("Failed to write {}: {}", path.display(), e);
                 return;
             }
         };
@@ -143,7 +156,7 @@ impl RgbConfig {
 
     pub fn load() -> Option<Self> {
         let path = conf_path(RGB_CONF);
-        if !Path::new(&path).exists() {
+        if !path.exists() {
             return None;
         }
         let f = fs::File::open(&path).ok()?;
