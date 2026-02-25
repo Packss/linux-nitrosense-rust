@@ -1,9 +1,4 @@
 /// Acer per-zone RGB keyboard backlight control.
-///
-/// Communicates through two character devices exposed by the
-/// `acer-wmi` / `acer-gkbbl` kernel driver:
-///   - `/dev/acer-gkbbl-0`        – dynamic modes & brightness
-///   - `/dev/acer-gkbbl-static-0` – static per-zone colour
 
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -32,10 +27,6 @@ impl Default for Rgb {
     }
 }
 
-/// Apply a keyboard lighting mode.
-///
-/// `mode == 0` → static (per-zone colour).
-/// `mode >= 1` → dynamic effect (breath, neon, wave, shifting, zoom).
 pub fn set_mode(
     mode: u8,
     zone: u8,
@@ -45,15 +36,13 @@ pub fn set_mode(
     color: Rgb,
 ) {
     if mode == 0 {
-        set_static(zone, color);
+        set_static(zone, color, brightness);
     } else {
         set_dynamic(mode, speed, brightness, direction, color);
     }
 }
 
-// -- internals --------------------------------------------------------------
-
-fn set_static(zone: u8, color: Rgb) {
+fn set_static(zone: u8, color: Rgb, brightness: u8) {
     if zone == 0 {
         // "all" – write to zones 1..=4
         for z in 1..=4u8 {
@@ -63,7 +52,7 @@ fn set_static(zone: u8, color: Rgb) {
         write_device(DEVICE_STATIC, &static_payload(zone, color));
     }
     // Apply brightness payload after static colour change
-    write_device(DEVICE_DYNAMIC, &brightness_payload());
+    write_device(DEVICE_DYNAMIC, &brightness_payload(brightness));
 }
 
 fn set_dynamic(mode: u8, speed: u8, brightness: u8, direction: u8, color: Rgb) {
@@ -71,7 +60,7 @@ fn set_dynamic(mode: u8, speed: u8, brightness: u8, direction: u8, color: Rgb) {
     payload[0] = mode;
     payload[1] = speed;
     payload[2] = brightness;
-    payload[3] = if mode == 3 { 8 } else { 0 }; // wave special
+    payload[3] = if mode == 3 { 8 } else { 0 }; // wave special from python script
     payload[4] = direction;
     payload[5] = color.r;
     payload[6] = color.g;
@@ -81,13 +70,15 @@ fn set_dynamic(mode: u8, speed: u8, brightness: u8, direction: u8, color: Rgb) {
 }
 
 fn static_payload(zone: u8, color: Rgb) -> [u8; PAYLOAD_SIZE_STATIC] {
+    // zone is 1-based index (1,2,3,4)
+    // python: payload[0] = 1 << (zone - 1)
     [1 << (zone - 1), color.r, color.g, color.b]
 }
 
-fn brightness_payload() -> [u8; PAYLOAD_SIZE] {
+fn brightness_payload(brightness: u8) -> [u8; PAYLOAD_SIZE] {
     let mut p = [0u8; PAYLOAD_SIZE];
-    p[2] = 0; // default brightness
-    p[9] = 1;
+    p[2] = brightness; 
+    p[9] = 1; 
     p
 }
 
@@ -98,6 +89,10 @@ fn write_device(path: &str, payload: &[u8]) {
                 eprintln!("Error writing to {path}: {e}");
             }
         }
-        Err(e) => eprintln!("Error opening {path}: {e}"),
+        Err(e) => {
+             // Silently fail if device doesn't exist (e.g. testing)
+             // or print debug
+             eprintln!("Failed to open {path}: {e}");
+        }
     }
 }

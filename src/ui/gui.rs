@@ -7,8 +7,9 @@ use gtk4::gdk;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box as GtkBox, Button, CheckButton, CssProvider, DropDown, Grid, Label,
-    LevelBar, Orientation, Scale, Stack, StackSwitcher, StringList, StyleContext, TextView, Window,
+    Align, Box as GtkBox, Button, CheckButton, ColorButton, CssProvider, DropDown,
+    Frame, Grid, Label, LevelBar, Orientation, Scale, Stack, StackSwitcher,
+    StringList, StyleContext, TextView, Window, Adjustment,
 };
 
 use std::cell::RefCell;
@@ -253,6 +254,48 @@ impl AppState {
 
     pub fn charge_limit_text(&self) -> &str {
         if self.battery_charge_limit { "On" } else { "Off" }
+    }
+
+    // -- keyboard -----------------------------------------------------------
+
+    pub fn set_rgb_mode(&mut self, mode: u8) {
+        self.rgb_config.mode = mode;
+        self.apply_rgb();
+    }
+
+    pub fn set_rgb_zone(&mut self, zone: u8) {
+        self.rgb_config.zone = zone;
+        self.apply_rgb();
+    }
+
+    pub fn set_rgb_speed(&mut self, speed: u8) {
+        self.rgb_config.speed = speed;
+        self.apply_rgb();
+    }
+
+    pub fn set_rgb_brightness(&mut self, brightness: u8) {
+        self.rgb_config.brightness = brightness;
+        self.apply_rgb();
+    }
+
+    pub fn set_rgb_direction(&mut self, direction: u8) {
+        self.rgb_config.direction = direction;
+        self.apply_rgb();
+    }
+
+    pub fn set_rgb_color(&mut self, r: u8, g: u8, b: u8) {
+        self.rgb_config.color.r = r;
+        self.rgb_config.color.g = g;
+        self.rgb_config.color.b = b;
+        self.apply_rgb();
+    }
+
+    fn apply_rgb(&self) {
+        let c = &self.rgb_config;
+        keyboard::set_mode(
+            c.mode, c.zone, c.speed, c.brightness, c.direction, c.color
+        );
+        c.save();
     }
 
     pub fn shutdown(&mut self) {
@@ -762,14 +805,155 @@ fn make_row_multi(label: &str, widget: &impl IsA<gtk4::Widget>) -> GtkBox {
 }
 
 fn build_keyboard_tab(state: &Rc<RefCell<AppState>>) -> GtkBox {
-    // Keep placeholder for now or move existing simple logic here
-    let container = GtkBox::new(Orientation::Vertical, 6);
+    let container = GtkBox::new(Orientation::Vertical, 12);
     container.set_margin_top(20);
-    let label = Label::new(Some("Keyboard RGB Settings"));
-    container.append(&label);
+    container.set_margin_bottom(20);
+    container.set_margin_start(20);
+    container.set_margin_end(20);
     
-    // Zone selection, color picker logic...
-    // Requires sending Request::SetKeyboardColor(zone, r, g, b)
+    // Header
+    let label = Label::new(Some("Keyboard RGB Settings"));
+    // label.add_css_class("title-2"); // assuming this class exists or standard gtk
+    container.append(&label);
+
+    // Initial state
+    let st = state.borrow();
+    let initial_mode = st.rgb_config.mode;
+    let initial_zone = st.rgb_config.zone;
+    let initial_speed = st.rgb_config.speed;
+    let initial_brit = st.rgb_config.brightness;
+    let initial_dir = st.rgb_config.direction;
+    let initial_color = st.rgb_config.color;
+    drop(st);
+
+    // -- Mode --
+    let list_modes = StringList::new(&["Static", "Breathing", "Neon", "Wave", "Shifting", "Zoom", "Meteor"]);
+    let mode_dd = DropDown::new(Some(list_modes), gtk4::Expression::NONE);
+    mode_dd.set_selected(initial_mode as u32);
+    container.append(&make_row_multi("Mode", &mode_dd));
+
+    // -- Zone (Static only) --
+    let list_zones = StringList::new(&["All Zones", "Zone 1", "Zone 2", "Zone 3", "Zone 4"]);
+    let zone_dd = DropDown::new(Some(list_zones), gtk4::Expression::NONE);
+    zone_dd.set_selected(initial_zone as u32);
+    let zone_row = make_row_multi("Zone", &zone_dd);
+    container.append(&zone_row);
+
+    // -- Color --
+    let color_btn = ColorButton::new();
+    let rgba = gdk::RGBA::new(
+        initial_color.r as f32 / 255.0,
+        initial_color.g as f32 / 255.0,
+        initial_color.b as f32 / 255.0,
+        1.0
+    );
+    color_btn.set_rgba(&rgba);
+    let color_row = make_row_multi("Color", &color_btn);
+    container.append(&color_row);
+
+    // -- Direction --
+    // List: Index 0 = Right, Index 1 = Left
+    let list_direction = StringList::new(&["Right", "Left"]); 
+    let dir_dd = DropDown::new(Some(list_direction), gtk4::Expression::NONE);
+    // New logic: 1 = Right, 2 = Left
+    // If initial_dir is 2 (Left), select index 1.
+    // Otherwise (1 or default), select index 0 (Right).
+    dir_dd.set_selected(if initial_dir == 2 { 1 } else { 0 });
+    let dir_row = make_row_multi("Direction", &dir_dd);
+    container.append(&dir_row);
+
+    // -- Brightness --
+    let b_adj = Adjustment::new(initial_brit as f64, 0.0, 100.0, 1.0, 10.0, 0.0);
+    let brightness_scale = Scale::new(Orientation::Horizontal, Some(&b_adj));
+    brightness_scale.set_digits(0);
+    brightness_scale.set_hexpand(true);
+    brightness_scale.set_width_request(200);
+    let brit_row = make_row_multi("Brightness", &brightness_scale);
+    container.append(&brit_row);
+
+    // -- Speed --
+    let s_adj = Adjustment::new(initial_speed as f64, 0.0, 9.0, 1.0, 1.0, 0.0);
+    let speed_scale = Scale::new(Orientation::Horizontal, Some(&s_adj));
+    speed_scale.set_digits(0);
+    speed_scale.set_hexpand(true);
+    speed_scale.set_width_request(200);
+    let speed_row = make_row_multi("Speed", &speed_scale);
+    container.append(&speed_row);
+
+    // Logic to show/hide rows based on mode
+    let uv_zone = zone_row.clone();
+    let uv_dir = dir_row.clone();
+    let uv_speed = speed_row.clone();
+
+    let update_visibility = Rc::new(move |mode: u32| {
+        let is_static = mode == 0;
+        uv_zone.set_visible(is_static);
+        uv_dir.set_visible(!is_static);
+        uv_speed.set_visible(!is_static);
+    });
+    
+    update_visibility(initial_mode as u32);
+
+    // -- Signals --
+
+    let s = Rc::clone(state);
+    let uv = update_visibility.clone();
+    mode_dd.connect_selected_notify(move |d| {
+        let mode = d.selected();
+        uv(mode);
+        if let Ok(mut st) = s.try_borrow_mut() {
+            st.set_rgb_mode(mode as u8);
+        }
+    });
+
+    let s = Rc::clone(state);
+    zone_dd.connect_selected_notify(move |d| {
+        let zone = d.selected();
+        if let Ok(mut st) = s.try_borrow_mut() {
+            st.set_rgb_zone(zone as u8);
+        }
+    });
+
+    let s = Rc::clone(state);
+    dir_dd.connect_selected_notify(move |d| {
+        let dir_idx = d.selected();
+        // Index 0 (Right) -> 1, Index 1 (Left) -> 2
+        let dir_val = if dir_idx == 0 { 1 } else { 2 };
+        if let Ok(mut st) = s.try_borrow_mut() {
+            st.set_rgb_direction(dir_val as u8);
+        }
+    });
+
+    let s = Rc::clone(state);
+    color_btn.connect_color_set(move |btn| {
+        let rgba = btn.rgba();
+        let r = (rgba.red() * 255.0) as u8;
+        let g = (rgba.green() * 255.0) as u8;
+        let b = (rgba.blue() * 255.0) as u8;
+        
+        eprintln!("Color set: r={} g={} b={}", r, g, b);
+        
+        if let Ok(mut st) = s.try_borrow_mut() {
+            st.set_rgb_color(r, g, b);
+        }
+    });
+
+    let s = Rc::clone(state);
+    brightness_scale.connect_change_value(move |_, _, val| {
+        if let Ok(mut st) = s.try_borrow_mut() {
+            st.set_rgb_brightness(val as u8);
+        }
+        glib::Propagation::Proceed
+    });
+
+    let s = Rc::clone(state);
+    speed_scale.connect_change_value(move |_, _, val| {
+         if let Ok(mut st) = s.try_borrow_mut() {
+            st.set_rgb_speed(val as u8);
+        }
+        glib::Propagation::Proceed
+    });
     
     container
 }
+
