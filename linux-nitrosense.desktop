@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=NitroSense
 Comment=Monitor and control Acer Nitro laptop fans and RGB
-Exec=/usr/local/bin/linux-nitrosense
+Exec=/usr/bin/env linux-nitrosense
 Icon=utilities-system-monitor
 Terminal=false
 Type=Application

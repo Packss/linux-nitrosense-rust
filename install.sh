@@ -10,7 +10,7 @@ SERVICE_FILE="linux-nitrosense.service"
 DESKTOP_FILE="linux-nitrosense.desktop"
 BINARY_PATH="target/release/linux-nitrosense"
 BUNDLED_BIN="./linux-nitrosense"
-INSTALL_BIN="/usr/local/bin/linux-nitrosense"
+INSTALL_BIN="/usr/bin/linux-nitrosense"
 REPO="Packss/linux-nitrosense-rust"
 
 # 1. Check for bundled binary in current directory
