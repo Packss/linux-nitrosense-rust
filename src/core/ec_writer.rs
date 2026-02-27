@@ -66,9 +66,9 @@ impl EcWriter {
 
         // Unload then reload with write support
         println!("Reloading 'ec_sys' with write support...");
-        let _ = Command::new("modprobe").args(["-r", "ec_sys"]).status();
-        let _ = Command::new("modprobe")
-            .args(["ec_sys", "write_support=1"])
+        let _ = Command::new("/usr/bin/env").args(["modprobe", "-r", "ec_sys"]).status();
+        let _ = Command::new("/usr/bin/env")
+            .args(["modprobe", "ec_sys", "write_support=1"])
             .status();
 
         if fs::metadata(path).is_ok() {
@@ -89,7 +89,7 @@ impl EcWriter {
     }
 
     fn load_acpi_ec() -> Option<File> {
-        let _ = Command::new("modprobe").arg("acpi_ec").status();
+        let _ = Command::new("/usr/bin/env").args(["modprobe", "acpi_ec"]).status();
 
         let path = "/dev/ec";
         if fs::metadata(path).is_ok() {
