@@ -56,7 +56,7 @@
             pkgs.rustc
             pkgs.cargo
             pkgs.rustfmt
-            pkgs.clang
+            pkgs.libclang
             pkgs.clippy
             pkgs.gtk4
             pkgs.glib
