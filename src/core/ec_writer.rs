@@ -6,7 +6,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use kmod::{Context, Module};
+use std::process::Command;
 
 /// Handle for communicating with the EC.
 pub struct EcWriter {
@@ -66,14 +66,10 @@ impl EcWriter {
 
         // Unload then reload with write support
         println!("Reloading 'ec_sys' with write support...");
-        if let Ok(ctx) = Context::new() {
-             if let Some(module) = ctx.module("ec_sys") {
-                 let _ = module.unload();
-             }
-             if let Some(module) = ctx.module("ec_sys") {
-                 let _ = module.insert("write_support=1");
-             }
-        }
+        let _ = Command::new("/usr/bin/env").args(["modprobe", "-r", "ec_sys"]).status();
+        let _ = Command::new("/usr/bin/env")
+            .args(["modprobe", "ec_sys", "write_support=1"])
+            .status();
 
         if fs::metadata(path).is_ok() {
             match OpenOptions::new().read(true).write(true).open(path) {
@@ -93,11 +89,7 @@ impl EcWriter {
     }
 
     fn load_acpi_ec() -> Option<File> {
-        if let Ok(ctx) = Context::new() {
-            if let Some(module) = ctx.module("acpi_ec") {
-                let _ = module.insert("");
-            }
-        }
+        let _ = Command::new("/usr/bin/env").args(["modprobe", "acpi_ec"]).status();
 
         let path = "/dev/ec";
         if fs::metadata(path).is_ok() {
