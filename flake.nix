@@ -25,6 +25,7 @@
           nativeBuildInputs = [
             pkgs.pkg-config
             pkgs.wrapGAppsHook4
+            pkgs.rustPlatform.bindgenHook
           ];
 
           buildInputs = [
@@ -32,6 +33,7 @@
             pkgs.gtk4
             pkgs.libadwaita
             pkgs.gsettings-desktop-schemas
+            pkgs.kmod
           ];
 
           postInstall = ''
