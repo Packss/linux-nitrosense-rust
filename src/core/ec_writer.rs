@@ -76,6 +76,7 @@ impl EcWriter {
             .args(["modprobe", "ec_sys", "write_support=on"])
             .status();
 
+        let path = "/sys/kernel/debug/ec/ec0/io";
         if fs::metadata(path).is_ok() {
             match OpenOptions::new().read(true).write(true).open(path) {
                 Ok(f) => {
