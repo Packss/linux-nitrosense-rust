@@ -676,7 +676,7 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
 
     let prof_saving = CheckButton::builder().label("Power Saving (15 W)").css_classes(["mode-btn"]).build();
     let prof_balanced = CheckButton::builder().label("Balanced (25 W)").css_classes(["mode-btn"]).build();
-    let prof_max = CheckButton::builder().label("Max Performance (45 W)").css_classes(["mode-btn"]).build();
+    let prof_max = CheckButton::builder().label("Max Performance (60 W)").css_classes(["mode-btn"]).build();
     prof_balanced.set_group(Some(&prof_saving));
     prof_max.set_group(Some(&prof_saving));
 
@@ -731,7 +731,7 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
             if btn.is_active() {
                 if let Ok(mut s) = st.try_borrow_mut() {
                     s.set_power_profile(PowerProfile::MaxPerformance);
-                    entry.set_text("45");
+                    entry.set_text("60");
                 }
             }
         });

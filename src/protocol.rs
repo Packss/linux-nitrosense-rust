@@ -64,7 +64,7 @@ impl PowerProfile {
         match self {
             PowerProfile::PowerSaving => 15_000,
             PowerProfile::Balanced => 25_000,
-            PowerProfile::MaxPerformance => 45_000,
+            PowerProfile::MaxPerformance => 60_000,
         }
     }
 
