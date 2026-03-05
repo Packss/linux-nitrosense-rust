@@ -23,6 +23,8 @@ pub struct EcData {
     pub undervolt_status: String,
     pub cpu_manual_level: u8,
     pub gpu_manual_level: u8,
+    pub tdp_value: u32,
+    pub power_profile: PowerProfile,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
@@ -49,12 +51,38 @@ pub enum BatteryStatus {
     Unknown(u8),
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+pub enum PowerProfile {
+    PowerSaving,
+    Balanced,
+    MaxPerformance,
+}
+
+impl PowerProfile {
+    /// Default TDP (in milliwatts) for each predefined profile.
+    pub fn default_tdp_mw(&self) -> u32 {
+        match self {
+            PowerProfile::PowerSaving => 15_000,
+            PowerProfile::Balanced => 25_000,
+            PowerProfile::MaxPerformance => 45_000,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            PowerProfile::PowerSaving => "Power Saving",
+            PowerProfile::Balanced => "Balanced",
+            PowerProfile::MaxPerformance => "Max Performance",
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Request {
     GetStatus,
     SetCpuFanMode(FanMode),
     SetGpuFanMode(FanMode),
-    SetCpuFanSpeed(u8), // Raw value for now, or percentage?
+    SetCpuFanSpeed(u8),
     SetGpuFanSpeed(u8),
     SetNitroMode(NitroMode),
     SetKbTimeout(bool),
@@ -62,6 +90,8 @@ pub enum Request {
     SetBatteryLimit(bool),
     SetKeyboardColor(u8, u8, u8, u8), // zone, r, g, b
     ApplyUndervolt(usize),
+    SetTdp(u32),                       // TDP in milliwatts
+    SetPowerProfile(PowerProfile),     // Preset profile (also sets TDP)
 }
 
 #[derive(Debug, Serialize, Deserialize)]

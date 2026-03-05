@@ -8,7 +8,7 @@ use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box as GtkBox, Button, CheckButton, ColorButton, CssProvider, DropDown,
-    Frame, Grid, Label, LevelBar, Orientation, Scale, Stack, StackSwitcher,
+    Entry, Frame, Grid, Label, LevelBar, Orientation, Scale, Stack, StackSwitcher,
     StringList, StyleContext, TextView, Window, Adjustment,
 };
 
@@ -16,9 +16,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::client::Client;
-use crate::config::{NitroConfig, RgbConfig};
+use crate::config::{NitroConfig, RgbConfig, TdpConfig};
 use crate::core::cpu_ctl::VoltageInfo;
-use crate::protocol::{BatteryStatus, EcData, FanMode, NitroMode, Request, Response};
+use crate::protocol::{BatteryStatus, EcData, FanMode, NitroMode, PowerProfile, Request, Response};
 use crate::utils::keyboard::{self, Rgb};
 
 // Shared application state
@@ -51,6 +51,10 @@ pub struct AppState {
     
     pub voltage_info: VoltageInfo,
     pub undervolt_status: String,
+
+    // TDP / Power Profile
+    pub tdp_value: u32,
+    pub power_profile: PowerProfile,
 
     // Keyboard RGB (Client side state for UI)
     pub rgb_config: RgbConfig,
@@ -90,6 +94,8 @@ impl AppState {
             selected_color: Rgb::default(),
             voltage_info: VoltageInfo { voltage: 0.0, min_recorded: 0.0, max_recorded: 0.0 },
             undervolt_status: String::new(),
+            tdp_value: TdpConfig::load_or_default().tdp_mw,
+            power_profile: TdpConfig::load_or_default().profile,
         }
     }
 
@@ -119,6 +125,8 @@ impl AppState {
                 
                 self.voltage_info = data.voltage_info;
                 self.undervolt_status = data.undervolt_status;
+                self.tdp_value = data.tdp_value;
+                self.power_profile = data.power_profile;
             }
             Ok(Response::Error(e)) => eprintln!("Daemon error: {}", e),
             Ok(_) => eprintln!("Unexpected response"),
@@ -220,6 +228,21 @@ impl AppState {
     }
     
     pub fn refresh_voltage(&mut self) {
+    }
+
+    // TDP Control
+
+    pub fn set_tdp(&mut self, mw: u32) {
+        if let Ok(Response::Ok) = self.client.send(Request::SetTdp(mw)) {
+            self.tdp_value = mw;
+        }
+    }
+
+    pub fn set_power_profile(&mut self, profile: PowerProfile) {
+        if let Ok(Response::Ok) = self.client.send(Request::SetPowerProfile(profile)) {
+            self.power_profile = profile;
+            self.tdp_value = profile.default_tdp_mw();
+        }
     }
 
     // Config Persistence
@@ -631,6 +654,135 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
     tune_card.append(&tune_grid);
     grid.attach(&tune_card, 0, 1, 3, 1);
 
+    // -----------------------------------------------------------------------
+    // TDP Control Card (row 2, full width)
+    // -----------------------------------------------------------------------
+    let tdp_card = GtkBox::new(Orientation::Vertical, 12);
+    tdp_card.add_css_class("card");
+
+    let tdp_title = Label::new(Some("TDP CONTROL (ryzenadj)"));
+    tdp_title.add_css_class("section-title");
+    tdp_title.set_halign(Align::Start);
+    tdp_card.append(&tdp_title);
+
+    let tdp_content = GtkBox::new(Orientation::Horizontal, 20);
+
+    // -- Left: Power Profile radio buttons --
+    let profile_box = GtkBox::new(Orientation::Vertical, 8);
+    let prof_label = Label::new(Some("Power Profile"));
+    prof_label.add_css_class("label-secondary");
+    prof_label.set_halign(Align::Start);
+    profile_box.append(&prof_label);
+
+    let prof_saving = CheckButton::builder().label("Power Saving (15 W)").css_classes(["mode-btn"]).build();
+    let prof_balanced = CheckButton::builder().label("Balanced (25 W)").css_classes(["mode-btn"]).build();
+    let prof_max = CheckButton::builder().label("Max Performance (45 W)").css_classes(["mode-btn"]).build();
+    prof_balanced.set_group(Some(&prof_saving));
+    prof_max.set_group(Some(&prof_saving));
+
+    // Set initial selection
+    {
+        let s = state.borrow();
+        match s.power_profile {
+            PowerProfile::PowerSaving => prof_saving.set_active(true),
+            PowerProfile::MaxPerformance => prof_max.set_active(true),
+            PowerProfile::Balanced => prof_balanced.set_active(true),
+        }
+    }
+
+    // Profile callbacks – selecting a profile also updates the TDP entry
+    let tdp_entry = Entry::builder()
+        .placeholder_text("TDP (watts)")
+        .width_chars(8)
+        .build();
+    {
+        let initial_tdp = state.borrow().tdp_value;
+        tdp_entry.set_text(&format!("{}", initial_tdp / 1000));
+    }
+
+    {
+        let st = Rc::clone(state);
+        let entry = tdp_entry.clone();
+        prof_saving.connect_toggled(move |btn| {
+            if btn.is_active() {
+                if let Ok(mut s) = st.try_borrow_mut() {
+                    s.set_power_profile(PowerProfile::PowerSaving);
+                    entry.set_text("15");
+                }
+            }
+        });
+    }
+    {
+        let st = Rc::clone(state);
+        let entry = tdp_entry.clone();
+        prof_balanced.connect_toggled(move |btn| {
+            if btn.is_active() {
+                if let Ok(mut s) = st.try_borrow_mut() {
+                    s.set_power_profile(PowerProfile::Balanced);
+                    entry.set_text("25");
+                }
+            }
+        });
+    }
+    {
+        let st = Rc::clone(state);
+        let entry = tdp_entry.clone();
+        prof_max.connect_toggled(move |btn| {
+            if btn.is_active() {
+                if let Ok(mut s) = st.try_borrow_mut() {
+                    s.set_power_profile(PowerProfile::MaxPerformance);
+                    entry.set_text("45");
+                }
+            }
+        });
+    }
+
+    profile_box.append(&prof_saving);
+    profile_box.append(&prof_balanced);
+    profile_box.append(&prof_max);
+    tdp_content.append(&profile_box);
+
+    // -- Right: Custom TDP entry --
+    let custom_box = GtkBox::new(Orientation::Vertical, 8);
+    let custom_label = Label::new(Some("Custom TDP (watts)"));
+    custom_label.add_css_class("label-secondary");
+    custom_label.set_halign(Align::Start);
+    custom_box.append(&custom_label);
+
+    custom_box.append(&tdp_entry);
+
+    let tdp_apply = Button::with_label("Apply TDP");
+    let tdp_status = Label::new(None);
+    tdp_status.add_css_class("label-secondary");
+    tdp_status.set_halign(Align::Start);
+
+    {
+        let st = Rc::clone(state);
+        let entry = tdp_entry.clone();
+        let status = tdp_status.clone();
+        tdp_apply.connect_clicked(move |_| {
+            let text = entry.text();
+            match text.trim().parse::<u32>() {
+                Ok(watts) if watts > 0 && watts <= 200 => {
+                    let mw = watts * 1000;
+                    let mut s = st.borrow_mut();
+                    s.set_tdp(mw);
+                    status.set_text(&format!("TDP set to {} W", watts));
+                }
+                _ => {
+                    status.set_text("Invalid value (1-200 W)");
+                }
+            }
+        });
+    }
+
+    custom_box.append(&tdp_apply);
+    custom_box.append(&tdp_status);
+    tdp_content.append(&custom_box);
+
+    tdp_card.append(&tdp_content);
+    grid.attach(&tdp_card, 0, 2, 3, 1);
+
     // Wrapper for home tab
     let container = GtkBox::new(Orientation::Vertical, 0);
     container.append(&grid);
@@ -661,6 +813,14 @@ fn build_home_tab(state: &Rc<RefCell<AppState>>) -> HomeTab {
         
         // Update UV Status
         uv_status.set_text(&s.undervolt_status);
+
+        // Update TDP profile radio buttons (but don't overwrite the entry
+        // text — that would prevent the user from typing a custom value).
+        match s.power_profile {
+            PowerProfile::PowerSaving => prof_saving.set_active(true),
+            PowerProfile::MaxPerformance => prof_max.set_active(true),
+            PowerProfile::Balanced => prof_balanced.set_active(true),
+        }
     }) as Box<dyn FnMut(&AppState)>));
 
     HomeTab { container, update_fn }

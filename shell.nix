@@ -10,7 +10,6 @@ pkgs.mkShell {
     gtk4
     glib
     gsettings-desktop-schemas
-    kmod
     libclang
   ];
 

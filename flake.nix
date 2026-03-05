@@ -33,7 +33,6 @@
             pkgs.gtk4
             pkgs.libadwaita
             pkgs.gsettings-desktop-schemas
-            pkgs.kmod
           ];
 
           postInstall = ''

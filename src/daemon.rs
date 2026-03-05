@@ -4,28 +4,36 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 
-use crate::config::{NitroConfig, RgbConfig};
+use crate::config::{NitroConfig, RgbConfig, TdpConfig};
 use crate::core::cpu_ctl::CpuController;
 use crate::core::device_regs::{detect_device, EcRegisters};
 use crate::core::ec_writer::EcWriter;
-use crate::protocol::{BatteryStatus, EcData, FanMode, NitroMode, Request, Response, SOCKET_PATH};
+use crate::core::tdp_ctl;
+use crate::protocol::{
+    BatteryStatus, EcData, FanMode, NitroMode, PowerProfile, Request, Response, SOCKET_PATH,
+};
 use crate::utils::keyboard::{self, Rgb};
 
 struct DaemonState {
     ec: EcWriter,
     regs: EcRegisters,
     cpu_ctl: CpuController,
+    tdp_mw: u32,
+    power_profile: PowerProfile,
 }
 
 impl DaemonState {
     fn new() -> io::Result<Self> {
         let (regs, cpu_type) = detect_device();
         let ec = EcWriter::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-        
+        let tdp_cfg = TdpConfig::load_or_default();
+
         Ok(Self {
             ec,
             regs,
             cpu_ctl: CpuController::new(cpu_type),
+            tdp_mw: tdp_cfg.tdp_mw,
+            power_profile: tdp_cfg.profile,
         })
     }
 
@@ -89,6 +97,8 @@ impl DaemonState {
                     undervolt_status: self.cpu_ctl.undervolt_status.clone(),
                     cpu_manual_level: self.ec.read(self.regs.cpu_manual_speed_control),
                     gpu_manual_level: self.ec.read(self.regs.gpu_manual_speed_control),
+                    tdp_value: self.tdp_mw,
+                    power_profile: self.power_profile,
                 };
                 Response::Status(data)
             }
@@ -181,6 +191,34 @@ impl DaemonState {
                 self.cpu_ctl.apply_undervolt(idx);
                 Response::Ok
             }
+            Request::SetTdp(mw) => {
+                match tdp_ctl::set_tdp(mw) {
+                    Ok(()) => {
+                        self.tdp_mw = mw;
+                        let mut cfg = TdpConfig::load_or_default();
+                        cfg.tdp_mw = mw;
+                        cfg.save();
+                        Response::Ok
+                    }
+                    Err(e) => Response::Error(e),
+                }
+            }
+            Request::SetPowerProfile(profile) => {
+                let tdp = profile.default_tdp_mw();
+                match tdp_ctl::apply_tdp_and_profile(tdp, profile) {
+                    Ok(()) => {
+                        self.tdp_mw = tdp;
+                        self.power_profile = profile;
+                        let cfg = TdpConfig {
+                            tdp_mw: tdp,
+                            profile,
+                        };
+                        cfg.save();
+                        Response::Ok
+                    }
+                    Err(e) => Response::Error(e),
+                }
+            }
         }
     }
 }
@@ -230,6 +268,16 @@ pub fn run_daemon() {
     if let Ok(mut state) = DaemonState::new() {
         if let Some(cfg) = NitroConfig::load() {
              let _ = state.ec.write(state.regs.nitro_mode, cfg.nitro_mode);
+        }
+
+        // Restore TDP settings
+        if tdp_ctl::is_available() {
+            let tdp_cfg = TdpConfig::load_or_default();
+            if let Err(e) = tdp_ctl::apply_tdp_and_profile(tdp_cfg.tdp_mw, tdp_cfg.profile) {
+                eprintln!("Failed to restore TDP settings: {}", e);
+            } else {
+                println!("Restored TDP: {} mW, profile: {:?}", tdp_cfg.tdp_mw, tdp_cfg.profile);
+            }
         }
 
         for stream in listener.incoming() {

@@ -4,6 +4,7 @@
 /// as simple line-delimited values (matching the original Python behaviour) so that 
 /// existing configs remain compatible.
 
+use crate::protocol::PowerProfile;
 use crate::utils::keyboard::Rgb;
 use std::env;
 use std::fs;
@@ -12,6 +13,7 @@ use std::path::PathBuf;
 
 const NITRO_CONF: &str = "nitrosense.conf";
 const RGB_CONF: &str = "rgb.conf";
+const TDP_CONF: &str = "tdp.conf";
 
 fn config_dir() -> PathBuf {
     if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
@@ -179,5 +181,69 @@ impl RgbConfig {
                 b: next_u8()?,
             },
         })
+    }
+}
+
+// TDP / Power Profile config
+
+#[derive(Debug, Clone)]
+pub struct TdpConfig {
+    /// TDP in milliwatts (e.g. 25000 = 25 W).
+    pub tdp_mw: u32,
+    /// Power profile: 0 = PowerSaving, 1 = Balanced, 2 = MaxPerformance.
+    pub profile: PowerProfile,
+}
+
+impl Default for TdpConfig {
+    fn default() -> Self {
+        Self {
+            tdp_mw: 25_000,
+            profile: PowerProfile::Balanced,
+        }
+    }
+}
+
+impl TdpConfig {
+    pub fn load_or_default() -> Self {
+        Self::load().unwrap_or_default()
+    }
+
+    pub fn save(&self) {
+        ensure_dir();
+        let path = conf_path(TDP_CONF);
+        let mut f = match fs::File::create(&path) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Failed to write {}: {}", path.display(), e);
+                return;
+            }
+        };
+        let _ = writeln!(f, "{}", self.tdp_mw);
+        let profile_idx: u8 = match self.profile {
+            PowerProfile::PowerSaving => 0,
+            PowerProfile::Balanced => 1,
+            PowerProfile::MaxPerformance => 2,
+        };
+        let _ = writeln!(f, "{}", profile_idx);
+    }
+
+    pub fn load() -> Option<Self> {
+        let path = conf_path(TDP_CONF);
+        if !path.exists() {
+            return None;
+        }
+        let f = fs::File::open(&path).ok()?;
+        let mut lines = BufReader::new(f).lines();
+
+        let tdp_mw: u32 = lines.next()?.ok()?.trim().parse().ok()?;
+        let profile_idx: u8 = lines.next()?.ok()?.trim().parse().ok()?;
+
+        let profile = match profile_idx {
+            0 => PowerProfile::PowerSaving,
+            2 => PowerProfile::MaxPerformance,
+            _ => PowerProfile::Balanced,
+        };
+
+        Some(TdpConfig { tdp_mw, profile })
     }
 }

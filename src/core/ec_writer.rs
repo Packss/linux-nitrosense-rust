@@ -54,11 +54,16 @@ impl EcWriter {
     // -- kernel module helpers ----------------------------------------------
 
     fn load_ec_sys() -> Option<File> {
-        let path = "/sys/kernel/debug/ec/ec0/io";
 
+        if fs::metadata("/dev/port").is_ok() {
+            if let Ok(f) = OpenOptions::new().read(true).write(true).open("/dev/port") {
+                println!("'/dev/port' interface found.");
+                return Some(f);
+            }
+        }
         // First, check if the file exists and is writable
-        if fs::metadata(path).is_ok() {
-            if let Ok(f) = OpenOptions::new().read(true).write(true).open(path) {
+        if fs::metadata("/sys/kernel/debug/ec/ec0/io").is_ok() {
+            if let Ok(f) = OpenOptions::new().read(true).write(true).open("/sys/kernel/debug/ec/ec0/io") {
                 println!("'ec_sys' interface found and writable.");
                 return Some(f);
             }
@@ -68,7 +73,7 @@ impl EcWriter {
         println!("Reloading 'ec_sys' with write support...");
         let _ = Command::new("/usr/bin/env").args(["modprobe", "-r", "ec_sys"]).status();
         let _ = Command::new("/usr/bin/env")
-            .args(["modprobe", "ec_sys", "write_support=1"])
+            .args(["modprobe", "ec_sys", "write_support=on"])
             .status();
 
         if fs::metadata(path).is_ok() {
