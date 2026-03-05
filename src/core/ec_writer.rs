@@ -55,12 +55,12 @@ impl EcWriter {
 
     fn load_ec_sys() -> Option<File> {
 
-        if fs::metadata("/dev/port").is_ok() {
-            if let Ok(f) = OpenOptions::new().read(true).write(true).open("/dev/port") {
-                println!("'/dev/port' interface found.");
-                return Some(f);
-            }
-        }
+        // if fs::metadata("/dev/port").is_ok() {
+        //     if let Ok(f) = OpenOptions::new().read(true).write(true).open("/dev/port") {
+        //         println!("'/dev/port' interface found.");
+        //         return Some(f);
+        //     }
+        // }
         // First, check if the file exists and is writable
         if fs::metadata("/sys/kernel/debug/ec/ec0/io").is_ok() {
             if let Ok(f) = OpenOptions::new().read(true).write(true).open("/sys/kernel/debug/ec/ec0/io") {

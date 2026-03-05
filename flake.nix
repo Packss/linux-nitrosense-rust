@@ -94,6 +94,7 @@
                 ExecStart = "${self.packages.${pkgs.system}.default}/bin/linux-nitrosense --daemon";
                 Restart = "on-failure";
                 Type = "simple";
+                User = "root";
               };
             };
           };
